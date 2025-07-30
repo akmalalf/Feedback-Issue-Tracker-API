@@ -1,0 +1,34 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Environment
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Firebase service account key
+firebase-adminsdk.json
+
+# SSH private key (misalnya untuk EC2)
+feedback-app.pem
+
+# Mac / Windows / Linux system files
+.DS_Store
+Thumbs.db
+
+# VSCode config (optional)
+.vscode/
+
+# Logs
+logs/
+*.log
+
+# Optional runtime or build artifacts
+dist/
+build/

@@ -1,58 +1,42 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const User = require('../models/User');
 
+const SECRET = process.env.JWT_SECRET || 'dev-secret';
 
-router.post('/register', async (req, res) => {
+// REGISTER
+router.post('/register', async (req, res, next) => {
   try {
-    const user = new User(req.body);
-    await user.save();
-    res.status(201).json({ message: 'User registered' });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
+    const { name, email, password } = req.body || {};
+    if (!name || !email || !password) {
+      const e = new Error('Missing fields'); e.status = 400; e.expose = true; throw e;
+    }
+
+    const exists = await User.findOne({ email });
+    if (exists) { const e = new Error('Email already registered'); e.status = 400; e.expose = true; throw e; }
+
+    const user = await User.create({ name, email, password });
+    const token = jwt.sign({ userId: user._id, role: user.role }, SECRET, { expiresIn: '2h' });
+
+    res.json({ message: 'User registered successfully', token });
+  } catch (err) { next(err); }
 });
 
-router.post('/login', async (req, res) => {
+// LOGIN
+router.post('/login', async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
+    const user = await User.findOne({ email }).select('+password');
+    if (!user) { const e = new Error('Invalid credentials'); e.status = 401; e.expose = true; throw e; }
 
-    // Cek user ada atau tidak
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid email or password' });
-    }
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) { const e = new Error('Invalid credentials'); e.status = 401; e.expose = true; throw e; }
 
-    // Bandingkan password
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid email or password' });
-    }
-
-    // Buat token
-    const token = jwt.sign(
-      { userId: user._id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    );
-
-    res.json({
-      message: 'Login successful',
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
+    const token = jwt.sign({ userId: user._id, role: user.role }, SECRET, { expiresIn: '2h' });
+    res.json({ message: 'Login successful', token });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;

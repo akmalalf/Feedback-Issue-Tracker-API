@@ -1,21 +1,55 @@
+const path = require('path');
 const express = require('express');
-const app = express();
-const authRoutes = require('./routes/auth');
-const feedbackRoutes = require('./routes/feedback');
-const authMiddleware = require('./middlewares/auth');
+const helmet = require('helmet');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
+require('dotenv').config();
 
-app.use(morgan('dev'));
+const app = express();
+
+// --- Security & basics ---
+app.use(helmet());
+app.use(cors({
+  origin: (process.env.CORS_ORIGINS || 'http://localhost:3000').split(','),
+  credentials: true,
+}));
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(morgan('combined'));
 
-app.use('/api', authRoutes);
-app.use('/api/feedbacks', authMiddleware.verifyToken, (req, res, next) => {
-  console.log('localhost:5000/api/feedbacks hit:', req.method);
-  console.log('[APP] /api/feedbacks route hit:', req.method);
-  next();
-}, feedbackRoutes);
+// --- Serve uploads (DEV/TEST) ---
+// if (process.env.NODE_ENV !== 'production') {
+//   app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// }
 
-const uploadRoutes = require('./routes/test');
-app.use('/api/upload', uploadRoutes);
+// --- Healthz ---
+app.get('/healthz', (req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString() });
+});
+
+// --- swagger ---
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./docs/swagger');
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// --- Routes (pakai nama konsisten) ---
+app.use('/api/auth', require('./routes/auth'));           // pastikan file ini ada
+app.use('/api/feedbacks', require('./routes/feedback'));  // pastikan file ini ada
+
+// --- 404 & Error handler ---
+app.use((req, res, next) => {
+  const e = new Error('Route not found');
+  e.status = 404; e.code = 'NOT_FOUND'; e.expose = true;
+  next(e);
+});
+const errorHandler = require('./middlewares/error-handler'); // pastikan nama file PERSIS
+app.use(errorHandler);
 
 module.exports = app;
